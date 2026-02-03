@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Pong</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:black;
+  overflow:hidden;
+  font-family:Arial;
+}
+#gameWrapper{
+  position:relative;
+  width:100%;
+  height:100vh;
+  max-width:1000px;
+  margin:auto;
+}
+canvas{
+  width:100%;
+  height:100%;
+  background:#777;
+  border-radius:20px;
+  display:none;
+}
+
+/* MENÚ */
+.menu{
+  color:white;
+  text-align:center;
+  padding-top:60px;
+}
+button{
+  padding:14px;
+  width:260px;
+  margin:10px;
+  font-size:18px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+/* COLORES DIFICULTAD */
+.green{background:#2ecc71}
+.orange{background:#f39c12}
+.red{background:#e74c3c}
+.purple{background:#9b59b6}
+.pink{background:#fd79a8}
+
+/* CONTROLES */
+.controls{
+  position:absolute;
+  bottom:20px;
+  width:100%;
+  display:none;
+}
+.ctrl-left,.ctrl-right{
+  position:absolute;
+}
+.ctrl-left{left:20px}
+.ctrl-right{right:20px}
+.ctrl{
+  width:60px;
+  height:60px;
+  margin:6px;
+  border-radius:50%;
+  background:#ddd;
+  font-size:26px;
+  border:none;
+  cursor:pointer;
+}
+
+/* BOTÓN FULLSCREEN */
+#fsBtn{
+  position:absolute;
+  bottom:15px;
+  right:15px;
+  width:40px;
+  height:40px;
+  background:linear-gradient(45deg,#000 50%,#fff 50%);
+  border:2px solid white;
+  cursor:pointer;
+  z-index:50;
+}
+
+/* BOTÓN MENÚ */
+#menuBtn{
+  position:absolute;
+  top:15px;
+  left:15px;
+  padding:8px 14px;
+  font-size:14px;
+  display:none;
+  z-index:40;
+}
+</style>
+</head>
+
+<body>
+<div id="gameWrapper">
+
+<div id="mainMenu" class="menu">
+  <h1>PONG</h1>
+  <button onclick="startSolo()">Jugar solitario</button>
+  <button onclick="showDifficulty()">Jugar con bot</button>
+</div>
+
+<div id="difficultyMenu" class="menu" style="display:none">
+  <h2>Dificultad</h2>
+  <button class="green" onclick="startBot(3)">Fácil</button>
+  <button class="orange" onclick="startBot(5)">Media</button>
+  <button class="red" onclick="startBot(7)">Difícil</button>
+  <button class="purple" onclick="startBot(10)">Extrema</button>
+  <button class="pink" onclick="startBot(999)">Infinita</button>
+</div>
+
+<button id="menuBtn" onclick="goMenu()">Menú</button>
+<div id="fsBtn" onclick="toggleFullscreen()"></div>
+
+<canvas id="pong"></canvas>
+
+<div class="controls" id="controls">
+  <div class="ctrl-left">
+    <button class="ctrl" id="lUp">▲</button><br>
+    <button class="ctrl" id="lDown">▼</button>
+  </div>
+  <div class="ctrl-right" id="rightControls">
+    <button class="ctrl" id="rUp">▲</button><br>
+    <button class="ctrl" id="rDown">▼</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+/* ELEMENTOS */
+const canvas=document.getElementById("pong");
+const ctx=canvas.getContext("2d");
+const controls=document.getElementById("controls");
+const rightControls=document.getElementById("rightControls");
+const menuBtn=document.getElementById("menuBtn");
+
+/* BOTONES */
+const lUp=document.getElementById("lUp");
+const lDown=document.getElementById("lDown");
+const rUp=document.getElementById("rUp");
+const rDown=document.getElementById("rDown");
+
+let LU=false,LD=false,RU=false,RD=false;
+function bind(b,on,off){
+  b.onmousedown=b.ontouchstart=e=>{e.preventDefault();on()};
+  b.onmouseup=b.ontouchend=b.ontouchcancel=off;
+}
+bind(lUp,()=>LU=true,()=>LU=false);
+bind(lDown,()=>LD=true,()=>LD=false);
+bind(rUp,()=>RU=true,()=>RU=false);
+bind(rDown,()=>RD=true,()=>RD=false);
+
+/* TECLADO */
+const keys={};
+addEventListener("keydown",e=>keys[e.key]=true);
+addEventListener("keyup",e=>keys[e.key]=false);
+
+/* JUEGO */
+const pH=90,pW=10,bR=7;
+let lY,rY,bX,bY,bVX,bVY,lS,rS;
+let mode="solo",botSpeed=0,loopId;
+
+function resize(){
+  canvas.width=canvas.clientWidth;
+  canvas.height=canvas.clientHeight;
+}
+addEventListener("resize",resize);
+
+function startSolo(){mode="solo";start()}
+function showDifficulty(){
+  mainMenu.style.display="none";
+  difficultyMenu.style.display="block";
+}
+function startBot(s){mode="bot";botSpeed=s;start()}
+
+function start(){
+  mainMenu.style.display="none";
+  difficultyMenu.style.display="none";
+  canvas.style.display="block";
+  menuBtn.style.display="block";
+
+  // 👇 BOTONES SIEMPRE VISIBLES (PC + MÓVIL)
+  controls.style.display="block";
+
+  // 👇 OCULTAR DERECHA SOLO SI HAY BOT
+  rightControls.style.display=(mode==="bot"?"none":"block");
+
+  resize();
+  reset();
+  loop();
+}
+
+function goMenu(){
+  cancelAnimationFrame(loopId);
+  canvas.style.display="none";
+  controls.style.display="none";
+  menuBtn.style.display="none";
+  mainMenu.style.display="block";
+}
+
+function reset(){
+  lY=rY=canvas.height/2-pH/2;
+  lS=rS=0;
+  resetBall();
+}
+function resetBall(){
+  bX=canvas.width/2;
+  bY=canvas.height/2;
+  bVX=Math.random()>.5?5:-5;
+  bVY=Math.random()*3-1.5;
+}
+
+function loop(){
+  update();
+  draw();
+  loopId=requestAnimationFrame(loop);
+}
+
+function update(){
+  if((keys.w||LU)&&lY>0)lY-=6;
+  if((keys.s||LD)&&lY<canvas.height-pH)lY+=6;
+
+  if(mode==="solo"){
+    if((keys.ArrowUp||RU)&&rY>0)rY-=6;
+    if((keys.ArrowDown||RD)&&rY<canvas.height-pH)rY+=6;
+  }else{
+    rY+=Math.sign(bY-(rY+pH/2))*botSpeed;
+  }
+
+  bX+=bVX; bY+=bVY;
+  if(bY<bR||bY>canvas.height-bR)bVY*=-1;
+
+  if(bX-bR<pW&&bY>lY&&bY<lY+pH)bVX*=-1;
+  if(bX+bR>canvas.width-pW&&bY>rY&&bY<rY+pH)bVX*=-1;
+
+  if(bX<0){rS++;resetBall()}
+  if(bX>canvas.width){lS++;resetBall()}
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="black";
+  ctx.fillRect(0,lY,pW,pH);
+  ctx.fillRect(canvas.width-pW,rY,pW,pH);
+  ctx.beginPath();
+  ctx.arc(bX,bY,bR,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle="white";
+  ctx.font="28px Arial";
+  ctx.fillText(lS,canvas.width/4,60);
+  ctx.fillText(rS,canvas.width*3/4,60);
+}
+
+/* FULLSCREEN */
+function toggleFullscreen(){
+  const el=document.getElementById("gameWrapper");
+  if(!document.fullscreenElement){
+    el.requestFullscreen().catch(()=>{});
+  }else{
+    document.exitFullscreen();
+  }
+}
+</script>
+</body>
+</html>
